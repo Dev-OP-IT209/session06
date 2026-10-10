@@ -1,68 +1,46 @@
-# Bài 3: Quản lý Quy trình và Phân tích Hiệu năng Hệ thống
+# Bài 3: Cấu hình tường lửa UFW và chẩn đoán cổng mạng
 
-## Mục tiêu
-- Phân tích tiến trình hệ thống, phát hiện dịch vụ chiếm dụng tài nguyên CPU/RAM bất thường bằng `top` và `ps`.
-- Xử lý dừng tiến trình bị treo (`kill` / `pkill`) và cấu hình dịch vụ khởi động cùng hệ thống.
+## 1. Các lệnh cấu hình đã thực hiện
 
----
+### Bước 1: Thiết lập chính sách mặc định của UFW
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
 
-## 1. Giả lập Tiến trình Ngốn Tài nguyên (High-CPU / High-Memory Process)
+### Bước 2: Cho phép các cổng mạng cần thiết
+# Mở cổng SSH quản trị
+sudo ufw allow 22/tcp
 
-### Chạy tiến trình vòng lặp vô tận chạy ngầm:
-```bash
-python3 -c "while True: pass" &
-```
-*Kết quả:* Trả về Tiến trình PID, ví dụ: `[1] 14205`.
+# Mở cổng ứng dụng Web
+sudo ufw allow 8080/tcp
 
----
-
-## 2. Truy vết Tiến trình bằng `ps` và `top`
-
-### Lệnh `ps aux | grep python3`:
-```bash
-$ ps aux | grep python3
-user1    14205 98.5  0.4  28540  9120 pts/0    R    10:45   0:15 python3 -c while True: pass
-```
-
-### Màn hình theo dõi tài nguyên `top`:
-```text
-top - 10:46:10 up 2 days,  4:12,  1 user,  load average: 1.05, 0.60, 0.35
-Tasks: 112 total,   2 running, 110 sleeping,   0 stopped,   0 zombie
-%Cpu(s): 99.1 us,  0.9 sy,  0.0 ni,  0.0 id,  0.0 wa,  0.0 hi,  0.0 si
-
-  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
-14205 user1     20   0   28540   9120   3412 R  98.5   0.4   0:35.12 python3
-```
+### Bước 3: Kích hoạt tường lửa UFW
+sudo ufw enable
 
 ---
 
-## 3. Xử lý Dừng Tiến trình (`kill -9`)
+## 2. Nhật ký kiểm tra (Verification Logs)
 
-Gửi tín hiệu buộc dừng tiến trình PID `14205`:
-```bash
-sudo kill -9 14205
-```
+### Bước 1: Kiểm tra trạng thái tường lửa chi tiết
+$ sudo ufw status verbose
 
-Xác nhận tiến trình đã ngưng hoạt động:
-```bash
-$ ps aux | grep 14205
-# Không còn tiến trình xuất hiện
-```
+Kết quả đầu ra:
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
 
----
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW IN    Anywhere                  
+8080/tcp                   ALLOW IN    Anywhere                  
+22/tcp (v6)                ALLOW IN    Anywhere (v6)             
+8080/tcp (v6)              ALLOW IN    Anywhere (v6)             
 
-## 4. Quản lý Dịch vụ Tự động Khởi động cùng Hệ thống (`systemctl`)
+### Bước 2: Kiểm tra các cổng đang lắng nghe trên máy chủ
+$ ss -tlnp
 
-### Kích hoạt Nginx tự động khởi động cùng hệ thống:
-```bash
-sudo systemctl enable nginx
-```
-
-**Kết quả màn hình `systemctl status nginx`:**
-```text
-● nginx.service - A high performance web server and a reverse proxy server
-     Loaded: loaded (/lib/systemd/system/nginx.service; enabled; vendor preset: enabled)
-     Active: active (running) since Mon 2026-10-05 08:00:00 UTC; 2 days ago
-   Main PID: 1234 (nginx)
-```
-*(Trạng thái `enabled` chứng minh Nginx sẽ tự động chạy mỗi khi reboot máy chủ)*
+Kết quả đầu ra:
+State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process
+LISTEN     0      128    0.0.0.0:22          0.0.0.0:*         users:(("sshd",pid=850,fd=3))
+LISTEN     0      511    0.0.0.0:8080        0.0.0.0:*         users:(("node",pid=1234,fd=18))
+LISTEN     0      128       [::]:22             [::]:*         users:(("sshd",pid=850,fd=4))
