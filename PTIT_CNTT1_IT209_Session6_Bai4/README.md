@@ -1,75 +1,34 @@
-# Bài 4: Phân tích Sự cố Mạng và Kiểm tra Cổng Dịch vụ (Troubleshooting Network & Ports)
+# Bài 4: Quản lý tiến trình nền với nohup và tín hiệu Kill
 
-## Mục tiêu
-- Sử dụng công cụ chẩn đoán mạng CLI (`ping`, `curl`, `netstat`/`ss`, `traceroute`/`mtr`) để phân tích nguyên nhân sự cố mất kết nối hoặc phản hồi chậm.
-- Phân tích sự cố dịch vụ web phản hồi mã lỗi `502 Bad Gateway` hoặc ngắt kết nối.
+## 1. Các lệnh thực hiện
 
----
+### Bước 1: Khởi tạo và gán quyền thực thi cho script
+chmod +x loop-monitor.sh
 
-## 1. Kịch bản Phân tích Sự cố Mạng & Cổng Dịch vụ
-
-### Sự cố: Nginx Web Server phản hồi lỗi 502 Bad Gateway khi người dùng truy cập cổng 80.
+### Bước 2: Khởi chạy tiến trình ngầm độc lập bằng nohup
+nohup ./loop-monitor.sh > /dev/null 2>&1 &
 
 ---
 
-## 2. Các Bước Chẩn đoán & Lệnh Kiểm tra CLI
+## 2. Nhật ký kiểm tra (Verification Logs)
 
-### Bước 1: Kiểm tra kết nối ICMP & HTTP căn bản
-```bash
-# Kiểm tra độ trễ mạng
-ping -c 4 103.x.x.x
+### Bước 1: Tra cứu PID và kiểm tra tiến trình đang chạy
+$ ps aux | grep loop-monitor.sh
 
-# Kiểm tra phản hồi HTTP Header
-curl -I http://localhost
-```
-**Kết quả `curl -I`:**
-```text
-HTTP/1.1 502 Bad Gateway
-Server: nginx/1.18.0 (Ubuntu)
-Content-Type: text/html
-Content-Length: 157
-```
+Kết quả:
+user1    14520  0.0  0.1   6824  3028 pts/0    S    15:00   0:00 /bin/bash ./loop-monitor.sh
 
-### Bước 2: Kiểm tra danh sách các cổng đang LẮNG NGHE (`ss -tuln` / `netstat -tuln`)
-```bash
-sudo ss -tuln
-```
-**Kết quả hiển thị:**
-```text
-Netid  State   Recv-Q  Send-Q   Local Address:Port   Peer Address:Port  Process
-tcp    LISTEN  0       511            0.0.0.0:80          0.0.0.0:*
-tcp    LISTEN  0       4096           0.0.0.0:22          0.0.0.0:*
-```
-*Phân tích:* Cổng `80` (Nginx) đang lắng nghe, nhưng cổng `8082` (Backend Spring Boot app) **KHÔNG** xuất hiện trong danh sách Lắng nghe.
+### Bước 2: Kiểm tra dữ liệu log được ghi liên tục
+$ tail -n 10 /tmp/monitor.log
 
-### Bước 3: Kiểm tra nhật ký lỗi Nginx (`/var/log/nginx/error.log`)
-```bash
-sudo tail -n 20 /var/log/nginx/error.log
-```
-**Kết quả Log xuất hiện:**
-```text
-2026/10/07 10:50:00 [error] 1500#1500: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:8082/", host: "localhost"
-```
+Kết quả:
+System time: Sat Oct 10 15:00:05 UTC 2026
+System time: Sat Oct 10 15:00:10 UTC 2026
+System time: Sat Oct 10 15:00:15 UTC 2026
 
----
+### Bước 3: Tắt tiến trình an toàn bằng tín hiệu SIGTERM (15)
+$ kill -15 14520
 
-## 3. Nguyên nhân Root Cause & Giải pháp
-
-### Nguyên nhân:
-Dịch vụ Backend (Spring Boot running on port 8082) bị sập hoặc chưa được khởi động, khiến Nginx Reverse Proxy không thể chuyển tiếp request (upstream connection refused), dẫn đến mã lỗi `502 Bad Gateway`.
-
-### Giải pháp khắc phục:
-Khởi động lại dịch vụ Backend App:
-```bash
-sudo systemctl start spring-app
-```
-
-Kiểm tra lại cổng 8082 và truy cập thành công:
-```bash
-$ sudo ss -tuln | grep 8082
-tcp    LISTEN  0       100          0.0.0.0:8082         0.0.0.0:*
-
-$ curl -I http://localhost
-HTTP/1.1 200 OK
-Server: nginx/1.18.0 (Ubuntu)
-```
+### Bước 4: Xác nhận tiến trình đã ngắt
+$ ps aux | grep loop-monitor.sh
+(Không còn tiến trình loop-monitor.sh xuất hiện)
