@@ -1,59 +1,37 @@
-# Bài 2: Quản trị Tường lửa UFW cho Cụm Dịch vụ Multi-port
+# Bài 2: Cấu hình phân quyền Nhóm và sudoers bằng visudo
 
-## Mục tiêu
-- Thiết lập tường lửa UFW bảo vệ cụm dịch vụ chạy multi-port: SSH (22), Nginx HTTP (80), Spring Boot (8082).
-- Cô lập cổng hệ quản trị cơ sở dữ liệu MySQL (3306) khỏi truy cập từ bên ngoài Internet.
+## 1. Các lệnh đã thực hiện
 
----
+### Bước 1: Tạo nhóm và tài khoản người dùng
+sudo groupadd devops-admin
+sudo adduser deployer
+sudo usermod -aG devops-admin deployer
 
-## 1. Các bước Cấu hình Tường lửa UFW
+### Bước 2: Cấu hình /etc/sudoers bằng visudo
+Chạy lệnh cấu hình an toàn:
+sudo visudo
 
-### Bước 1: Khai báo chính sách mặc định
-```bash
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-```
-
-### Bước 2: Cho phép các cổng dịch vụ công khai
-```bash
-# Cho phép SSH quản trị
-sudo ufw allow 22/tcp
-
-# Cho phép Nginx Web Server
-sudo ufw allow 80/tcp
-
-# Cho phép Spring Boot Application
-sudo ufw allow 8082/tcp
-```
-
-### Bước 3: Kích hoạt tường lửa
-```bash
-sudo ufw enable
-```
+Thêm dòng sau vào cuối tệp tin:
+%devops-admin ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl status *
 
 ---
 
-## 2. Kiểm tra Trạng thái UFW (`sudo ufw status verbose`)
+## 2. Nhật ký kiểm tra (Verification Logs)
 
-```bash
-$ sudo ufw status verbose
-Status: active
-Logging: on (low)
-Default: deny (incoming), allow (outgoing), disabled (routed)
-New profiles: skip
+### Bước 1: Chuyển sang tài khoản deployer
+$ su - deployer
 
-To                         Action      From
---                         ------      ----
-22/tcp                     ALLOW IN    Anywhere                  
-80/tcp                     ALLOW IN    Anywhere                  
-8082/tcp                   ALLOW IN    Anywhere                  
-22/tcp (v6)                ALLOW IN    Anywhere (v6)             
-80/tcp (v6)                ALLOW IN    Anywhere (v6)             
-8082/tcp (v6)              ALLOW IN    Anywhere (v6)             
-```
+### Bước 2: Kiểm tra các quyền sudo được cấp
+$ sudo -l
 
----
+Kết quả đầu ra:
+Matching Defaults entries for deployer on server:
+    env_reset, mail_badpass, ...
 
-## 3. Đánh giá Bảo mật
-- Cổng **3306/tcp (MySQL)** hoàn toàn không có trong quy tắc `ALLOW IN`, đảm bảo dữ liệu chỉ có thể kết nối nội bộ từ `127.0.0.1`.
-- Tất cả cổng đi vào khác mặc định bị từ chối (`Default: deny incoming`).
+User deployer may run the following commands on server:
+    (ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl status *
+
+### Bước 3: Kiểm tra khởi động lại dịch vụ không cần mật khẩu
+$ sudo systemctl restart cron
+
+Kết quả: Lệnh thực thi thành công ngay lập tức mà không yêu cầu nhập mật khẩu.
